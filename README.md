@@ -1,59 +1,48 @@
 # Credit Card Default Prediction
 
-A machine learning pipeline to predict credit card default, exposed as a REST API via FastAPI.
+An educational historical-data classification pipeline with a FastAPI prediction interface. It fetches UCI dataset 350, preprocesses a train/test split, tunes three scikit-learn classifiers, and saves local artifacts. It is not a validated lending decision system.
 
-## Features
+## Pipeline
 
-- **Automated data acquisition** from the UCI ML Repository using `ucimlrepo`
-- **Preprocessing pipeline** with feature engineering, scaling, and train/test splitting
-- **Multi-model training** with GridSearchCV hyperparameter tuning (XGBoost, Random Forest, Logistic Regression)
-- **FastAPI deployment** with health check and prediction endpoints
-- **Swagger UI** for interactive API testing at `/docs`
+1. [loan_default_prediction.py](loan_default_prediction.py) fetches data through `ucimlrepo`, prints exploration output, and writes `loan_default_data.csv`.
+2. [data_preprocessing.py](data_preprocessing.py) creates a stratified split, fits preprocessing on the training portion, applies SMOTE to that portion, and saves `preprocessor.joblib`.
+3. [model_training.py](model_training.py) tunes **LogisticRegression, RandomForestClassifier, and GradientBoostingClassifier** with three-fold ROC-AUC grid search, prints held-out metrics, and saves each fitted model. It does not train XGBoost.
+4. [app.py](app.py) loads `preprocessor.joblib` and `logisticregression_model.joblib` at import. Serving always selects Logistic Regression; it does not automatically deploy the highest-scoring model.
 
-## Quick Start
+## Local setup and execution order
+
+Use a fresh environment rather than the committed `venv`:
 
 ```bash
 git clone https://github.com/Zinga18018/credit-card-default-prediction.git
 cd credit-card-default-prediction
-pip install -r requirements.txt
+python -m venv .venv-local
+source .venv-local/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install imbalanced-learn fastapi uvicorn
+```
 
-# Step 1: Fetch data and explore
+On Windows, activate with `.venv-local\Scripts\activate`. The last command supplies imports missing from the unpinned [requirements.txt](requirements.txt); it is not a verified dependency lock.
+
+After confirming the dataset's source and usage terms, the source-defined workflow is:
+
+```bash
 python loan_default_prediction.py
-
-# Step 2: Preprocess
 python data_preprocessing.py
-
-# Step 3: Train models
 python model_training.py
-
-# Step 4: Serve API
-uvicorn app:app --reload
+python -m uvicorn app:app --host 127.0.0.1 --port 8000
 ```
 
-Open `http://127.0.0.1:8000/docs` to interact with the API.
+The first step accesses the network and prints dataset rows. Training performs parallel grid searches and writes model files; it is not a lightweight startup check. Data acquisition and training also contain top-level work, so importing those modules is not side-effect-free. The required dataset and generated artifacts are not committed. The API exits during import if its artifacts are missing; load only trusted joblib files.
 
-## Architecture
+## API and evaluation limits
 
-```
-credit-card-default-prediction/
-  loan_default_prediction.py   # Data acquisition and exploration
-  data_preprocessing.py        # Cleaning, feature engineering, splitting
-  model_training.py            # Training, tuning, evaluation
-  app.py                       # FastAPI REST API
-  requirements.txt             # Dependencies
-```
+- `GET /health`: process health after artifact loading.
+- `POST /predict/`: a binary prediction and model probability using the `X1`–`X23` schema in `app.py`.
+- `/docs`: generated FastAPI documentation.
 
-## API Endpoints
+Prediction inputs are logged; do not submit sensitive customer records to this development service. Probabilities are not a guarantee of an individual's future behavior.
 
-| Method | Endpoint    | Description                    |
-|--------|-------------|--------------------------------|
-| GET    | `/health`   | Server health check            |
-| POST   | `/predict/` | Predict default probability    |
+Preprocessing and SMOTE happen **before** GridSearchCV divides the training data into folds. This permits information sharing across validation folds and can make CV estimates optimistic. The held-out test split is separate, but this is not a leakage-free cross-validation pipeline. No committed evaluation aggregate establishes accuracy, calibration, fairness, or production suitability.
 
-## Tech Stack
-
-Python, FastAPI, scikit-learn, XGBoost, Pandas, NumPy, ucimlrepo
-
-## License
-
-MIT
+The acquisition source identifies UCI dataset 350; confirm its attribution and terms before redistribution. The earlier README labels the project MIT, but no project license file accompanies that statement. Dataset rights and code licensing are separate questions.
